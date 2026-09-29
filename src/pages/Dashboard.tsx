@@ -128,17 +128,7 @@ export function Dashboard() {
           </button>
         </div>
 
-        <p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
-          Frei verfügbar
-        </p>
-        <p
-          className="tabular-nums text-4xl font-bold leading-tight"
-          style={{ color: freeCents >= 0 ? 'var(--success-text)' : 'var(--status-critical)' }}
-        >
-          {formatCents(freeCents)}
-        </p>
-
-        <div className="mt-4 flex gap-2">
+        <div className="flex gap-2">
           <StatTile label="Einnahmen" value={formatCents(incomeCents)} tone="good" />
           <StatTile label="Fixkosten" value={formatCents(fixedExpenseCents)} />
           <StatTile label="Sonstige Ausgaben" value={formatCents(variableExpenseCents)} />
@@ -147,10 +137,14 @@ export function Dashboard() {
 
       <section className="mb-6">
         <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
-          Ausgaben nach Kategorie
+          Wo dein Geld hingeht
         </h2>
         <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-          <CategoryDonut items={categoryItems} emptyLabel="Noch keine Ausgaben in diesem Monat." />
+          <CategoryDonut
+            items={categoryItems}
+            freeCents={freeCents}
+            emptyLabel="Noch keine Ausgaben in diesem Monat."
+          />
         </div>
       </section>
 
