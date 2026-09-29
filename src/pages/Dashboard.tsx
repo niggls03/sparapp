@@ -10,10 +10,6 @@ import { ContributeGoalSheet } from '../components/ContributeGoalSheet'
 import { formatMonthYear } from '../lib/format'
 import type { Transaction } from '../lib/types'
 
-function daysSince(iso: string): number {
-  return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24))
-}
-
 export function Dashboard() {
   const { profile, categories, transactions, goals, budgets } = useData()
   const navigate = useNavigate()
@@ -75,8 +71,6 @@ export function Dashboard() {
 
   const activeGoals = goals.filter((g) => !g.archived)
 
-  const showBackupReminder = !profile?.lastBackupAt || daysSince(profile.lastBackupAt) > 30
-
   return (
     <div className="mx-auto max-w-md px-4 pt-4">
       <header className="mb-5 flex items-center justify-between">
@@ -89,17 +83,6 @@ export function Dashboard() {
           </h1>
         </div>
       </header>
-
-      {showBackupReminder && (
-        <Link
-          to="/einstellungen"
-          className="mb-4 block rounded-xl px-3.5 py-2.5 text-[13px]"
-          style={{ background: 'color-mix(in srgb, var(--status-warning) 20%, transparent)', color: 'var(--text-primary)' }}
-        >
-          💾 {profile?.lastBackupAt ? 'Dein letztes Backup ist eine Weile her' : 'Noch kein Backup vorhanden'} –
-          jetzt sichern
-        </Link>
-      )}
 
       <section className="mb-6">
         <div
