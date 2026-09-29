@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useData } from '../state/DataContext'
-import { StatTile } from '../components/StatTile'
 import { CategoryDonut } from '../components/CategoryDonut'
 import { GoalCard } from '../components/GoalCard'
 import { TransactionRow } from '../components/TransactionRow'
 import { EmptyState } from '../components/EmptyState'
 import { TransactionFormSheet } from '../components/TransactionFormSheet'
 import { ContributeGoalSheet } from '../components/ContributeGoalSheet'
-import { formatCents, formatMonthYear } from '../lib/format'
+import { formatMonthYear } from '../lib/format'
 import type { Transaction } from '../lib/types'
 
 function daysSince(iso: string): number {
@@ -102,44 +101,33 @@ export function Dashboard() {
         </Link>
       )}
 
-      <div
-        className="mb-5 rounded-2xl border p-5"
-        style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <button
-            onClick={() => setMonthOffset((m) => m - 1)}
-            aria-label="Vorheriger Monat"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-lg"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            ‹
-          </button>
-          <span className="text-sm font-medium capitalize" style={{ color: 'var(--text-secondary)' }}>
-            {formatMonthYear(viewDate.getFullYear(), viewDate.getMonth())}
-          </span>
-          <button
-            onClick={() => setMonthOffset((m) => m + 1)}
-            aria-label="Nächster Monat"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-lg"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            ›
-          </button>
-        </div>
-
-        <div className="flex gap-2">
-          <StatTile label="Einnahmen" value={formatCents(incomeCents)} tone="good" />
-          <StatTile label="Fixkosten" value={formatCents(fixedExpenseCents)} />
-          <StatTile label="Sonstige Ausgaben" value={formatCents(variableExpenseCents)} />
-        </div>
-      </div>
-
       <section className="mb-6">
-        <h2 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
-          Wo dein Geld hingeht
-        </h2>
-        <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
+        <div
+          className="rounded-2xl border p-5"
+          style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}
+        >
+          <div className="mb-4 flex items-center justify-between">
+            <button
+              onClick={() => setMonthOffset((m) => m - 1)}
+              aria-label="Vorheriger Monat"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-lg"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              ‹
+            </button>
+            <span className="text-sm font-medium capitalize" style={{ color: 'var(--text-secondary)' }}>
+              {formatMonthYear(viewDate.getFullYear(), viewDate.getMonth())}
+            </span>
+            <button
+              onClick={() => setMonthOffset((m) => m + 1)}
+              aria-label="Nächster Monat"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-lg"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              ›
+            </button>
+          </div>
+
           <CategoryDonut
             items={categoryItems}
             freeCents={freeCents}
