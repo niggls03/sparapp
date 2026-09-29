@@ -8,6 +8,7 @@ import { EmptyState } from '../components/EmptyState'
 import { TransactionFormSheet } from '../components/TransactionFormSheet'
 import { ContributeGoalSheet } from '../components/ContributeGoalSheet'
 import { formatMonthYear } from '../lib/format'
+import { averageMonthlyFreeCents } from '../lib/planning'
 import type { Transaction } from '../lib/types'
 
 export function Dashboard() {
@@ -70,6 +71,7 @@ export function Dashboard() {
   )
 
   const activeGoals = goals.filter((g) => !g.archived)
+  const avgFree = useMemo(() => averageMonthlyFreeCents(transactions), [transactions])
 
   return (
     <div className="mx-auto max-w-md px-4 pt-4">
@@ -134,6 +136,7 @@ export function Dashboard() {
               <GoalCard
                 key={g.id}
                 goal={g}
+                averageMonthlyFreeCents={avgFree}
                 onOpen={() => navigate('/sparziele')}
                 onContribute={() => setContributeGoalId(g.id)}
               />
