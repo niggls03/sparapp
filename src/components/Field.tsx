@@ -20,7 +20,7 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className="w-full rounded-lg border px-3 py-2.5 text-[15px] outline-none"
+      className={`w-full rounded-lg border px-3 py-2.5 text-[15px] outline-none ${props.className ?? ''}`}
       style={{ borderColor: 'var(--border)', background: 'var(--page)', color: 'var(--text-primary)' }}
     />
   )

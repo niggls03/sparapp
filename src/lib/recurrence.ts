@@ -69,6 +69,37 @@ export function getDuePeriods(fc: FixedCost, untilIso: string): DuePeriod[] {
   return due
 }
 
+/**
+ * Letzte planmäßige Periode einer Regel bis einschließlich `untilIso`, unabhängig
+ * von `paused`/`lastGeneratedPeriod`. Wird beim Fortsetzen einer pausierten Regel
+ * genutzt, um direkt auf die aktuelle Periode vorzuspringen, statt die gesamte
+ * Pausenzeit nachträglich als Buchungen anzulegen.
+ */
+export function latestAlignedPeriodOnOrBefore(fc: FixedCost, untilIso: string): string | undefined {
+  const step = STEP_MONTHS[fc.interval]
+  const start = new Date(fc.startDate + 'T00:00:00')
+  let cursor = { year: start.getFullYear(), month0: start.getMonth() }
+  let last: string | undefined
+
+  for (let i = 0; i < 600; i++) {
+    const occurrenceIso = clampedOccurrence(cursor.year, cursor.month0, fc.dayOfMonth)
+    if (occurrenceIso > untilIso) break
+    if (fc.endDate && occurrenceIso > fc.endDate) break
+    last = periodKey(cursor.year, cursor.month0)
+    cursor = addMonths(cursor.year, cursor.month0, step)
+  }
+
+  return last
+}
+
+/** Verschiebt einen Perioden-Key um `deltaSteps` volle Intervall-Schritte. */
+export function stepPeriodKey(interval: RecurrenceInterval, key: string, deltaSteps: number): string {
+  const step = STEP_MONTHS[interval]
+  const { year, month0 } = parsePeriodKey(key)
+  const shifted = addMonths(year, month0, step * deltaSteps)
+  return periodKey(shifted.year, shifted.month0)
+}
+
 export function intervalLabel(interval: RecurrenceInterval): string {
   switch (interval) {
     case 'monthly':

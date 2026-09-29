@@ -7,7 +7,7 @@ import { intervalLabel } from '../lib/recurrence'
 import type { FixedCost } from '../lib/types'
 
 export function FixedCosts() {
-  const { categories, fixedCosts, updateFixedCost } = useData()
+  const { categories, fixedCosts, pauseFixedCost, resumeFixedCost } = useData()
   const [addOpen, setAddOpen] = useState(false)
   const [editing, setEditing] = useState<FixedCost | null>(null)
 
@@ -73,7 +73,7 @@ export function FixedCosts() {
                   </span>
                 </button>
                 <button
-                  onClick={() => updateFixedCost(fc.id, { paused: !fc.paused })}
+                  onClick={() => (fc.paused ? resumeFixedCost(fc.id) : pauseFixedCost(fc.id))}
                   className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
                   style={{ background: 'var(--page)', color: 'var(--text-muted)' }}
                 >

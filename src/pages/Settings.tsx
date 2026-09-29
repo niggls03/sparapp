@@ -3,8 +3,8 @@ import { useData } from '../state/DataContext'
 import { CategoryFormSheet } from '../components/CategoryFormSheet'
 import { Field, PrimaryButton, TextInput, DangerButton } from '../components/Field'
 import { MoneyInput } from '../components/MoneyInput'
-import { centsToInputValue, formatDate, parseAmountToCents } from '../lib/format'
-import { downloadBackup, restoreBackup, wipeAllData } from '../lib/backup'
+import { centsToInputValue, formatDate, parseAmountToCents, todayIso } from '../lib/format'
+import { restoreBackup, shareOrDownloadBackup, wipeAllData } from '../lib/backup'
 import type { Category } from '../lib/types'
 
 export function Settings() {
@@ -38,14 +38,37 @@ function SectionCard({ title, children }: { title: string; children: React.React
 }
 
 function ProfileSection() {
-  const { profile, updateProfile } = useData()
+  const { profile, updateProfile, fixedCosts, addFixedCost, updateFixedCost, pauseFixedCost } = useData()
   const [name, setName] = useState(profile?.name ?? '')
   const [income, setIncome] = useState(profile ? centsToInputValue(profile.monthlyIncomeCents) : '')
   const [saved, setSaved] = useState(false)
 
+  const salaryFixedCost = fixedCosts.find((f) => f.categoryId === 'cat-gehalt' && f.type === 'income')
+
   async function save() {
     const cents = parseAmountToCents(income || '0') ?? 0
     await updateProfile(name.trim(), cents)
+
+    // Das Einkommen wird als wiederkehrende Fixkosten-Regel geführt, sonst
+    // taucht es im Dashboard nirgends als Buchung auf.
+    if (cents > 0) {
+      if (salaryFixedCost) {
+        await updateFixedCost(salaryFixedCost.id, { amountCents: cents })
+      } else {
+        await addFixedCost({
+          name: 'Gehalt',
+          amountCents: cents,
+          type: 'income',
+          categoryId: 'cat-gehalt',
+          interval: 'monthly',
+          dayOfMonth: 1,
+          startDate: todayIso(),
+        })
+      }
+    } else if (salaryFixedCost && !salaryFixedCost.paused) {
+      await pauseFixedCost(salaryFixedCost.id)
+    }
+
     setSaved(true)
     setTimeout(() => setSaved(false), 1500)
   }
@@ -60,6 +83,10 @@ function ProfileSection() {
           <div className="rounded-lg border px-3 py-2" style={{ borderColor: 'var(--border)' }}>
             <MoneyInput value={income} onChange={setIncome} />
           </div>
+          <p className="mt-1 text-[12px]" style={{ color: 'var(--text-muted)' }}>
+            Wird als wiederkehrende Einnahme „Gehalt“ geführt – weitere Einnahmequellen
+            unter „Fixkosten“ hinzufügbar.
+          </p>
         </Field>
         <PrimaryButton onClick={save}>{saved ? 'Gespeichert ✓' : 'Speichern'}</PrimaryButton>
       </div>
@@ -178,9 +205,17 @@ function BudgetRow({
 }
 
 function BackupSection({ lastBackupAt, onRestored }: { lastBackupAt?: string; onRestored: () => Promise<void> }) {
+  const { markBackedUp } = useData()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [wipeArmed, setWipeArmed] = useState(false)
+
+  async function handleExport() {
+    const outcome = await shareOrDownloadBackup()
+    if (outcome === 'cancelled') return
+    await markBackedUp()
+    setStatus(outcome === 'shared' ? 'Backup geteilt/gesichert.' : 'Backup heruntergeladen.')
+  }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -206,9 +241,7 @@ function BackupSection({ lastBackupAt, onRestored }: { lastBackupAt?: string; on
           {lastBackupAt ? `Letztes Backup: ${formatDate(lastBackupAt.slice(0, 10))}` : 'Noch kein Backup erstellt.'}
         </p>
         <div className="flex flex-col gap-2">
-          <PrimaryButton onClick={() => downloadBackup().then(() => setStatus('Backup gespeichert.'))}>
-            Backup exportieren
-          </PrimaryButton>
+          <PrimaryButton onClick={handleExport}>Backup exportieren</PrimaryButton>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="w-full rounded-lg border py-3 text-[15px] font-semibold"
@@ -216,7 +249,13 @@ function BackupSection({ lastBackupAt, onRestored }: { lastBackupAt?: string; on
           >
             Backup importieren
           </button>
-          <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={handleImport} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={handleImport}
+          />
         </div>
         {status && (
           <p className="mt-2 text-[12px]" style={{ color: 'var(--text-muted)' }}>

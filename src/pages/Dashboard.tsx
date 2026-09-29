@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useData } from '../state/DataContext'
 import { StatTile } from '../components/StatTile'
 import { CategoryBreakdown } from '../components/CategoryBreakdown'
@@ -17,6 +17,7 @@ function daysSince(iso: string): number {
 
 export function Dashboard() {
   const { profile, categories, transactions, goals, budgets } = useData()
+  const navigate = useNavigate()
   const [monthOffset, setMonthOffset] = useState(0)
   const [addOpen, setAddOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
@@ -168,7 +169,7 @@ export function Dashboard() {
               <GoalCard
                 key={g.id}
                 goal={g}
-                onOpen={() => {}}
+                onOpen={() => navigate('/sparziele')}
                 onContribute={() => setContributeGoalId(g.id)}
               />
             ))}

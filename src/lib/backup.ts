@@ -24,22 +24,39 @@ export async function buildBackup(): Promise<BackupPayload> {
   }
 }
 
-export async function downloadBackup(): Promise<void> {
+export type BackupOutcome = 'shared' | 'downloaded' | 'cancelled'
+
+/**
+ * Sichert die Daten als JSON-Datei. Nutzt bevorzugt die Web-Share-API, damit auf
+ * dem iPhone im installierten Modus der native Teilen-Dialog ("In Dateien
+ * sichern") erscheint - ein reiner <a download>-Link ist dort unzuverlässig.
+ * Fällt sonst auf den klassischen Download-Link zurück (z.B. am Desktop).
+ */
+export async function shareOrDownloadBackup(): Promise<BackupOutcome> {
   const payload = await buildBackup()
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
   const dateStamp = payload.exportedAt.slice(0, 10)
+  const filename = `sparapp-backup-${dateStamp}.json`
+  const json = JSON.stringify(payload, null, 2)
+
+  const file = new File([json], filename, { type: 'application/json' })
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'SparApp-Backup' })
+      return 'shared'
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return 'cancelled'
+      // Fällt durch auf den Download-Link, falls Teilen aus anderem Grund fehlschlägt.
+    }
+  }
+
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `sparapp-backup-${dateStamp}.json`
+  a.download = filename
   a.click()
-  URL.revokeObjectURL(url)
-
-  const db = await getDb()
-  const profile = await db.get('profile', 'profile')
-  if (profile) {
-    await db.put('profile', { ...profile, lastBackupAt: payload.exportedAt })
-  }
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  return 'downloaded'
 }
 
 function isValidBackup(data: unknown): data is BackupPayload {

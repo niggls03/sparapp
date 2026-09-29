@@ -62,7 +62,11 @@ export function CategoryFormSheet({ open, onClose, category = null, defaultType 
         <div className="flex gap-3">
           <div className="w-20">
             <Field label="Icon">
-              <TextInput value={icon} onChange={(e) => setIcon(e.target.value.slice(0, 2))} className="text-center" />
+              <TextInput
+                value={icon}
+                onChange={(e) => setIcon(Array.from(e.target.value).slice(0, 4).join(''))}
+                className="text-center"
+              />
             </Field>
           </div>
           <div className="flex-1">

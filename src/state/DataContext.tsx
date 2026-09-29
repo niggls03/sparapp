@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { getDb, newId } from '../lib/db'
 import { DEFAULT_CATEGORIES } from '../lib/categories'
-import { getDuePeriods } from '../lib/recurrence'
+import { getDuePeriods, latestAlignedPeriodOnOrBefore, stepPeriodKey } from '../lib/recurrence'
 import { todayIso } from '../lib/format'
 import type {
   Category,
@@ -59,6 +59,7 @@ interface DataContextValue {
 
   completeOnboarding: (name: string, monthlyIncomeCents: number) => Promise<void>
   updateProfile: (name: string, monthlyIncomeCents: number) => Promise<void>
+  markBackedUp: () => Promise<void>
 
   addTransaction: (input: NewTransactionInput) => Promise<void>
   updateTransaction: (id: string, patch: Partial<NewTransactionInput>) => Promise<void>
@@ -69,8 +70,10 @@ interface DataContextValue {
   deleteCategory: (id: string) => Promise<void>
 
   addFixedCost: (input: NewFixedCostInput) => Promise<void>
-  updateFixedCost: (id: string, patch: Partial<NewFixedCostInput & { paused: boolean }>) => Promise<void>
+  updateFixedCost: (id: string, patch: Partial<NewFixedCostInput>) => Promise<void>
   deleteFixedCost: (id: string) => Promise<void>
+  pauseFixedCost: (id: string) => Promise<void>
+  resumeFixedCost: (id: string) => Promise<void>
 
   addGoal: (input: NewGoalInput) => Promise<void>
   updateGoal: (id: string, patch: Partial<Omit<SavingsGoal, 'id' | 'createdAt'>>) => Promise<void>
@@ -143,39 +146,82 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Fixkosten-Fälligkeiten neu prüfen und danach den kompletten Stand neu laden.
+  // Nötig nach jeder Änderung an einer Fixkosten-Regel, außerdem beim Start und
+  // wenn die App (als iOS-Homescreen-App) wieder in den Vordergrund kommt -
+  // z.B. wenn seit dem letzten Öffnen ein Monatswechsel stattgefunden hat.
+  const syncFixedCostsAndReload = useCallback(async () => {
+    await generateDueFixedCostTransactions()
+    await loadAll()
+  }, [generateDueFixedCostTransactions, loadAll])
+
   useEffect(() => {
     if (initRan.current) return
     initRan.current = true
     ;(async () => {
-      await generateDueFixedCostTransactions()
-      await loadAll()
+      await syncFixedCostsAndReload()
       setLoading(false)
     })()
-  }, [generateDueFixedCostTransactions, loadAll])
+  }, [syncFixedCostsAndReload])
 
-  const completeOnboarding = useCallback(async (name: string, monthlyIncomeCents: number) => {
-    const db = await getDb()
-    const newProfile: Profile = {
-      id: 'profile',
-      name,
-      monthlyIncomeCents,
-      onboardedAt: new Date().toISOString(),
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === 'visible') void syncFixedCostsAndReload()
     }
-    const tx = db.transaction(['profile', 'categories'], 'readwrite')
-    await tx.objectStore('profile').put(newProfile)
-    for (const cat of DEFAULT_CATEGORIES) {
-      await tx.objectStore('categories').put(cat)
-    }
-    await tx.done
-    setProfile(newProfile)
-    setCategories(DEFAULT_CATEGORIES)
-  }, [])
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [syncFixedCostsAndReload])
+
+  const completeOnboarding = useCallback(
+    async (name: string, monthlyIncomeCents: number) => {
+      const db = await getDb()
+      const newProfile: Profile = {
+        id: 'profile',
+        name,
+        monthlyIncomeCents,
+        onboardedAt: new Date().toISOString(),
+      }
+      const tx = db.transaction(['profile', 'categories', 'fixedCosts'], 'readwrite')
+      await tx.objectStore('profile').put(newProfile)
+      for (const cat of DEFAULT_CATEGORIES) {
+        await tx.objectStore('categories').put(cat)
+      }
+      // Das Einkommen aus der Ersteinrichtung wird als wiederkehrende Fixkosten-
+      // Regel angelegt, sonst würde es nirgends als Buchung auftauchen und das
+      // Dashboard bliebe leer.
+      if (monthlyIncomeCents > 0) {
+        const incomeFixedCost: FixedCost = {
+          id: newId(),
+          name: 'Gehalt',
+          amountCents: monthlyIncomeCents,
+          type: 'income',
+          categoryId: 'cat-gehalt',
+          interval: 'monthly',
+          dayOfMonth: 1,
+          startDate: todayIso(),
+        }
+        await tx.objectStore('fixedCosts').put(incomeFixedCost)
+      }
+      await tx.done
+      await syncFixedCostsAndReload()
+    },
+    [syncFixedCostsAndReload],
+  )
 
   const updateProfile = useCallback(async (name: string, monthlyIncomeCents: number) => {
     const db = await getDb()
     const existing = await db.get('profile', 'profile')
     if (!existing) return
     const updated: Profile = { ...existing, name, monthlyIncomeCents }
+    await db.put('profile', updated)
+    setProfile(updated)
+  }, [])
+
+  const markBackedUp = useCallback(async () => {
+    const db = await getDb()
+    const existing = await db.get('profile', 'profile')
+    if (!existing) return
+    const updated: Profile = { ...existing, lastBackupAt: new Date().toISOString() }
     await db.put('profile', updated)
     setProfile(updated)
   }, [])
@@ -231,23 +277,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setCategories((prev) => prev.filter((c) => c.id !== id))
   }, [])
 
-  const addFixedCost = useCallback(async (input: NewFixedCostInput) => {
-    const db = await getDb()
-    const fixedCost: FixedCost = { ...input, id: newId() }
-    await db.put('fixedCosts', fixedCost)
-    setFixedCosts((prev) => [...prev, fixedCost])
-  }, [])
+  const addFixedCost = useCallback(
+    async (input: NewFixedCostInput) => {
+      const db = await getDb()
+      const fixedCost: FixedCost = { ...input, id: newId() }
+      await db.put('fixedCosts', fixedCost)
+      // Neu statt nur lokal anzuhängen: ein Startdatum/Tag in der Vergangenheit
+      // dieses Monats (z.B. "Miete, Tag 1" an einem 15.) ist sofort fällig.
+      await syncFixedCostsAndReload()
+    },
+    [syncFixedCostsAndReload],
+  )
 
   const updateFixedCost = useCallback(
-    async (id: string, patch: Partial<NewFixedCostInput & { paused: boolean }>) => {
+    async (id: string, patch: Partial<NewFixedCostInput>) => {
       const db = await getDb()
       const existing = await db.get('fixedCosts', id)
       if (!existing) return
       const updated = { ...existing, ...patch }
       await db.put('fixedCosts', updated)
-      setFixedCosts((prev) => prev.map((f) => (f.id === id ? updated : f)))
+      await syncFixedCostsAndReload()
     },
-    [],
+    [syncFixedCostsAndReload],
   )
 
   const deleteFixedCost = useCallback(async (id: string) => {
@@ -255,6 +306,40 @@ export function DataProvider({ children }: { children: ReactNode }) {
     await db.delete('fixedCosts', id)
     setFixedCosts((prev) => prev.filter((f) => f.id !== id))
   }, [])
+
+  const pauseFixedCost = useCallback(async (id: string) => {
+    const db = await getDb()
+    const existing = await db.get('fixedCosts', id)
+    if (!existing) return
+    const updated: FixedCost = { ...existing, paused: true }
+    await db.put('fixedCosts', updated)
+    setFixedCosts((prev) => prev.map((f) => (f.id === id ? updated : f)))
+  }, [])
+
+  const resumeFixedCost = useCallback(
+    async (id: string) => {
+      const db = await getDb()
+      const existing = await db.get('fixedCosts', id)
+      if (!existing) return
+
+      // Beim Fortsetzen auf die aktuelle Periode vorspringen, statt die gesamte
+      // Pausenzeit nachträglich als Buchungen anzulegen. Wurde die aktuelle
+      // Periode schon vor dem Pausieren generiert, bleibt lastGeneratedPeriod
+      // unangetastet (sonst gäbe es eine doppelte Buchung).
+      const currentPeriod = latestAlignedPeriodOnOrBefore(existing, todayIso())
+      let lastGeneratedPeriod = existing.lastGeneratedPeriod
+      if (currentPeriod) {
+        const candidate = stepPeriodKey(existing.interval, currentPeriod, -1)
+        if (!lastGeneratedPeriod || candidate > lastGeneratedPeriod) {
+          lastGeneratedPeriod = candidate
+        }
+      }
+
+      await db.put('fixedCosts', { ...existing, paused: false, lastGeneratedPeriod })
+      await syncFixedCostsAndReload()
+    },
+    [syncFixedCostsAndReload],
+  )
 
   const addGoal = useCallback(async (input: NewGoalInput) => {
     const db = await getDb()
@@ -334,6 +419,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       budgets,
       completeOnboarding,
       updateProfile,
+      markBackedUp,
       addTransaction,
       updateTransaction,
       deleteTransaction,
@@ -343,6 +429,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addFixedCost,
       updateFixedCost,
       deleteFixedCost,
+      pauseFixedCost,
+      resumeFixedCost,
       addGoal,
       updateGoal,
       deleteGoal,
@@ -361,6 +449,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       budgets,
       completeOnboarding,
       updateProfile,
+      markBackedUp,
       addTransaction,
       updateTransaction,
       deleteTransaction,
@@ -370,6 +459,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addFixedCost,
       updateFixedCost,
       deleteFixedCost,
+      pauseFixedCost,
+      resumeFixedCost,
       addGoal,
       updateGoal,
       deleteGoal,

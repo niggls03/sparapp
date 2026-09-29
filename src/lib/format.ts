@@ -19,7 +19,7 @@ export function formatCentsSigned(cents: number): string {
 
 /** Wandelt eine Nutzereingabe wie "12,50" oder "12.5" in Cent (Ganzzahl) um. */
 export function parseAmountToCents(input: string): number | null {
-  const normalized = input.trim().replace(/\./g, '').replace(',', '.')
+  const normalized = input.trim().replace(',', '.')
   if (normalized === '' || Number.isNaN(Number(normalized))) return null
   const value = Number(normalized)
   if (!Number.isFinite(value) || value < 0) return null
