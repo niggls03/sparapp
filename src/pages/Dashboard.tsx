@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useData } from '../state/DataContext'
 import { StatTile } from '../components/StatTile'
-import { CategoryBreakdown } from '../components/CategoryBreakdown'
+import { CategoryDonut } from '../components/CategoryDonut'
 import { GoalCard } from '../components/GoalCard'
 import { TransactionRow } from '../components/TransactionRow'
 import { EmptyState } from '../components/EmptyState'
@@ -150,7 +150,7 @@ export function Dashboard() {
           Ausgaben nach Kategorie
         </h2>
         <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-1)' }}>
-          <CategoryBreakdown items={categoryItems} emptyLabel="Noch keine Ausgaben in diesem Monat." />
+          <CategoryDonut items={categoryItems} emptyLabel="Noch keine Ausgaben in diesem Monat." />
         </div>
       </section>
 
